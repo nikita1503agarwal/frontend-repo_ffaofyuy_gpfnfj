@@ -1,8 +1,28 @@
-import { useEffect, useState, Suspense, lazy } from 'react'
+import React, { useEffect, useState, Suspense, lazy } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
 
 // Lazy-load Spline to avoid StrictMode double-mount issues and heavy initial load
 const Spline = lazy(() => import('@splinetool/react-spline'))
+
+const SCENE_URL = 'https://prod.spline.design/7hQF8P8y8x9Lx9bE/scene.splinecode'
+
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props)
+    this.state = { hasError: false }
+  }
+  static getDerivedStateFromError() {
+    return { hasError: true }
+  }
+  componentDidCatch(error, info) {
+    // Silently fall back to static mode on any Spline runtime error
+    if (this.props.onError) this.props.onError(error, info)
+  }
+  render() {
+    if (this.state.hasError) return this.props.fallback
+    return this.props.children
+  }
+}
 
 function GlossyButton({ children }) {
   return (
@@ -22,6 +42,7 @@ export default function Hero() {
   // Client-only render guard for Spline (prevents mount-unmount flicker/vanish)
   const [mounted, setMounted] = useState(false)
   const [splineEnabled, setSplineEnabled] = useState(true)
+  const [sceneOk, setSceneOk] = useState(true)
 
   useEffect(() => {
     setMounted(true)
@@ -29,7 +50,35 @@ export default function Hero() {
     // Disable Spline on very low-power or narrow screens as a safety fallback
     const mq = window.matchMedia('(max-width: 420px)')
     if (mq.matches) setSplineEnabled(false)
+
+    // Preflight check: if scene URL is not accessible (403/404/CORS), fall back to static
+    const controller = new AbortController()
+    const checkScene = async () => {
+      try {
+        const res = await fetch(SCENE_URL, { method: 'GET', mode: 'cors', signal: controller.signal })
+        if (!res.ok) {
+          setSceneOk(false)
+          setSplineEnabled(false)
+        }
+      } catch (_err) {
+        setSceneOk(false)
+        setSplineEnabled(false)
+      }
+    }
+    checkScene()
+
+    return () => controller.abort()
   }, [])
+
+  const splineFallback = (
+    <div className="w-full h-full flex items-center justify-center">
+      <img
+        src="https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=1200&q=60"
+        alt="Artisan coffee"
+        className="w-full h-full object-cover opacity-80"
+      />
+    </div>
+  )
 
   return (
     <section className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden" style={{background: 'radial-gradient(1200px 600px at 70% 20%, rgba(216,167,155,0.15), transparent), radial-gradient(900px 500px at 20% 80%, rgba(199,154,99,0.12), transparent)',}}> 
@@ -69,19 +118,15 @@ export default function Hero() {
 
         <div className="order-1 lg:order-2 relative">
           <div className="relative aspect-[4/3] rounded-3xl overflow-hidden shadow-[0_30px_80px_rgba(18,18,18,0.15)] bg-gradient-to-br from-[#F5EDE2] to-[#FAF8F2]">
-            {/* 3D hero scene: replace URL with your Spline scene for ultimate realism */}
-            {mounted && splineEnabled ? (
+            {/* 3D hero scene with robust fallbacks */}
+            {mounted && splineEnabled && sceneOk ? (
               <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[#3A2A1E]/60">Loading scene…</div>}>
-                <Spline scene="https://prod.spline.design/7hQF8P8y8x9Lx9bE/scene.splinecode" />
+                <ErrorBoundary fallback={splineFallback} onError={() => { setSplineEnabled(false) }}>
+                  <Spline scene={SCENE_URL} />
+                </ErrorBoundary>
               </Suspense>
             ) : (
-              <div className="w-full h-full flex items-center justify-center">
-                <img
-                  src="https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=1200&q=60"
-                  alt="Artisan coffee"
-                  className="w-full h-full object-cover opacity-80"
-                />
-              </div>
+              splineFallback
             )}
 
             {/* Steam overlay */}
