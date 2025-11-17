@@ -1,5 +1,8 @@
+import { useEffect, useState, Suspense, lazy } from 'react'
 import { motion, useScroll, useTransform } from 'framer-motion'
-import Spline from '@splinetool/react-spline'
+
+// Lazy-load Spline to avoid StrictMode double-mount issues and heavy initial load
+const Spline = lazy(() => import('@splinetool/react-spline'))
 
 function GlossyButton({ children }) {
   return (
@@ -15,6 +18,18 @@ export default function Hero() {
   const { scrollY } = useScroll()
   const translateY = useTransform(scrollY, [0, 600], [0, -80])
   const opacity = useTransform(scrollY, [0, 300], [1, 0.6])
+
+  // Client-only render guard for Spline (prevents mount-unmount flicker/vanish)
+  const [mounted, setMounted] = useState(false)
+  const [splineEnabled, setSplineEnabled] = useState(true)
+
+  useEffect(() => {
+    setMounted(true)
+
+    // Disable Spline on very low-power or narrow screens as a safety fallback
+    const mq = window.matchMedia('(max-width: 420px)')
+    if (mq.matches) setSplineEnabled(false)
+  }, [])
 
   return (
     <section className="relative min-h-[90vh] w-full flex items-center justify-center overflow-hidden" style={{background: 'radial-gradient(1200px 600px at 70% 20%, rgba(216,167,155,0.15), transparent), radial-gradient(900px 500px at 20% 80%, rgba(199,154,99,0.12), transparent)',}}> 
@@ -53,9 +68,21 @@ export default function Hero() {
         </div>
 
         <div className="order-1 lg:order-2 relative">
-          <div className="relative aspect-[4/3] rounded-3xl overflow-hidden shadow-[0_30px_80px_rgba(18,18,18,0.15)]">
+          <div className="relative aspect-[4/3] rounded-3xl overflow-hidden shadow-[0_30px_80px_rgba(18,18,18,0.15)] bg-gradient-to-br from-[#F5EDE2] to-[#FAF8F2]">
             {/* 3D hero scene: replace URL with your Spline scene for ultimate realism */}
-            <Spline scene="https://prod.spline.design/7hQF8P8y8x9Lx9bE/scene.splinecode" />
+            {mounted && splineEnabled ? (
+              <Suspense fallback={<div className="w-full h-full flex items-center justify-center text-[#3A2A1E]/60">Loading scene…</div>}>
+                <Spline scene="https://prod.spline.design/7hQF8P8y8x9Lx9bE/scene.splinecode" />
+              </Suspense>
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <img
+                  src="https://images.unsplash.com/photo-1511920170033-f8396924c348?auto=format&fit=crop&w=1200&q=60"
+                  alt="Artisan coffee"
+                  className="w-full h-full object-cover opacity-80"
+                />
+              </div>
+            )}
 
             {/* Steam overlay */}
             <div className="pointer-events-none absolute -left-10 -top-10 right-0 bottom-0">
